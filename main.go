@@ -189,11 +189,15 @@ func main() {
 	if args := flag.Args(); len(args) > 0 {
 		for _, arg := range args {
 			inputBuffer = bytes.NewBuffer(nil)
+			base := filepath.Dir(arg)
 			err := filepath.Walk(arg, func(path string, info os.FileInfo, err error) error {
+				if err != nil {
+					return err
+				}
 				if info.IsDir() {
 					return nil
 				}
-				f, err := os.Open(info.Name())
+				f, err := os.Open(filepath.Join(base, info.Name()))
 				if err != nil {
 					return err
 				}
@@ -210,7 +214,9 @@ func main() {
 								return err
 							}
 							_, err = io.Copy(inputBuffer, f2)
-							inputBuffer.WriteString("\n")
+							if inputBuffer.Len() > 0 {
+								inputBuffer.WriteString("\n")
+							}
 							f2.Close()
 							if err != nil {
 								return err
@@ -220,13 +226,19 @@ func main() {
 					return nil
 				}
 				_, err = io.Copy(inputBuffer, f)
-				inputBuffer.WriteString("\n")
+				if inputBuffer.Len() > 0 {
+					inputBuffer.WriteString("\n")
+				}
 				return err
 			})
 			if err != nil {
 				fmt.Println(err)
 				os.Exit(1)
 			}
+		}
+		if inputBuffer.Len() == 0 {
+			fmt.Println("No input files")
+			os.Exit(1)
 		}
 		paused = true
 	}
