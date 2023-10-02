@@ -1,12 +1,16 @@
 package main
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -32,6 +36,8 @@ var (
 	endpointFlag = flag.String("endpoint", "/debug/pprof", "target path")
 	intervalFlag = flag.Int("i", 5, "time in seconds between refresh")
 )
+
+var inputBuffer *bytes.Buffer
 
 func Refresh() {
 	var err error
@@ -180,6 +186,50 @@ func Display() bool {
 func main() {
 	flag.Parse()
 
+	if args := flag.Args(); len(args) > 0 {
+		for _, arg := range args {
+			inputBuffer = bytes.NewBuffer(nil)
+			err := filepath.Walk(arg, func(path string, info os.FileInfo, err error) error {
+				if info.IsDir() {
+					return nil
+				}
+				f, err := os.Open(info.Name())
+				if err != nil {
+					return err
+				}
+				defer f.Close()
+				if strings.HasSuffix(info.Name(), ".zip") {
+					zr, err := zip.NewReader(f, info.Size())
+					if err != nil {
+						return err
+					}
+					for _, zf := range zr.File {
+						if strings.HasSuffix(zf.Name, "debug=2.txt") {
+							f2, err := zf.Open()
+							if err != nil {
+								return err
+							}
+							_, err = io.Copy(inputBuffer, f2)
+							inputBuffer.WriteString("\n")
+							f2.Close()
+							if err != nil {
+								return err
+							}
+						}
+					}
+					return nil
+				}
+				_, err = io.Copy(inputBuffer, f)
+				inputBuffer.WriteString("\n")
+				return err
+			})
+			if err != nil {
+				fmt.Println(err)
+				os.Exit(1)
+			}
+		}
+		paused = true
+	}
 	if *helpFlag {
 		printHelp()
 		os.Exit(0)
