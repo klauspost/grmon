@@ -41,7 +41,11 @@ type Routine struct {
 	Trace     []string `json:"trace"`
 }
 
-func ReadRoutines(buf bytes.Buffer) (routines Routines) {
+type StringReader interface {
+	ReadString(byte) (string, error)
+}
+
+func ReadRoutines(buf StringReader) (routines Routines) {
 	var p *Routine
 
 	for {

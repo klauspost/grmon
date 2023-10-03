@@ -2,15 +2,16 @@ package main
 
 import (
 	"archive/zip"
+	"bufio"
 	"bytes"
 	"context"
 	"flag"
 	"fmt"
-	"io"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -185,10 +186,10 @@ func Display() bool {
 
 func main() {
 	flag.Parse()
-
+	debug.SetGCPercent(20)
+	var g Routines
 	if args := flag.Args(); len(args) > 0 {
 		for _, arg := range args {
-			inputBuffer = bytes.NewBuffer(nil)
 			base := filepath.Dir(arg)
 			err := filepath.Walk(arg, func(path string, info os.FileInfo, err error) error {
 				if err != nil {
@@ -213,35 +214,24 @@ func main() {
 							if err != nil {
 								return err
 							}
-							_, err = io.Copy(inputBuffer, f2)
-							if inputBuffer.Len() > 0 {
-								inputBuffer.WriteString("\n")
-							}
+							g = append(g, ReadRoutines(bufio.NewReaderSize(f2, 64<<10))...)
 							f2.Close()
-							if err != nil {
-								return err
-							}
 						}
 					}
 					return nil
 				}
-				_, err = io.Copy(inputBuffer, f)
-				if inputBuffer.Len() > 0 {
-					inputBuffer.WriteString("\n")
-				}
-				return err
+				g = append(g, ReadRoutines(bufio.NewReaderSize(f, 64<<10))...)
+				return nil
 			})
 			if err != nil {
 				fmt.Println(err)
 				os.Exit(1)
 			}
 		}
-		if inputBuffer.Len() == 0 {
-			fmt.Println("No input files")
-			os.Exit(1)
-		}
 		paused = true
+		cachedRoutines = &g
 	}
+
 	if *helpFlag {
 		printHelp()
 		os.Exit(0)
